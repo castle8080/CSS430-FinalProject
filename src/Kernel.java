@@ -1,4 +1,3 @@
-import java.util.*;
 import java.lang.reflect.*;
 import java.io.*;
 
@@ -49,6 +48,7 @@ public class Kernel
    private static Scheduler scheduler;
    private static Disk disk;
    private static Cache cache;
+   private static FileSystem fs;
 
    // Synchronized Queues
    private static SyncQueue waitQueue;  // for threads to wait for their child
@@ -64,6 +64,7 @@ public class Kernel
    // The heart of Kernel
    public static int interrupt( int irq, int cmd, int param, Object args ) {
       TCB myTcb;
+      FileTableEntry ftEnt;
       switch( irq ) {
          case INTERRUPT_SOFTWARE: // System calls
             switch( cmd ) { 
@@ -77,11 +78,13 @@ public class Kernel
                   disk.start( );
 
                   // instantiate a cache memory
-                  cache = new Cache( disk.blockSize, 10 );
+                  cache = new Cache( Disk.blockSize, 10 );
 
                   // instantiate synchronized queues
                   ioQueue = new SyncQueue( );
                   waitQueue = new SyncQueue( scheduler.getMaxThreads( ) );
+                  
+                  fs = new FileSystem(1000);
                   return OK;
                case EXEC:
                   return sysExec( ( String[] )args );
@@ -150,9 +153,14 @@ public class Kernel
                      case STDERR:
                         System.out.println( "threaOS: caused read errors" );
                         return ERROR;
+                     default:
+                         ftEnt = getFileTableEntry(param);
+                         if (ftEnt == null) {
+                             return ERROR;
+                         }
+                         return fs.read(ftEnt, (byte[]) args);
+                         
                   }
-                  // return FileSystem.read( param, byte args[] );
-                  return ERROR;
                case WRITE:
                   switch ( param ) {
                      case STDIN:
@@ -160,12 +168,17 @@ public class Kernel
                         return ERROR;
                      case STDOUT:
                         System.out.print( (String)args );
-                        break;
+                        return OK;
                      case STDERR:
                         System.err.print( (String)args );
-                        break;
+                        return OK;
+                     default:
+                        ftEnt = getFileTableEntry(param);
+                        if (ftEnt == null) {
+                            return ERROR;
+                        }
+                        return fs.write(ftEnt, (byte[]) args);
                   }
-                  return OK;
                case CREAD:   // to be implemented in assignment 4
                   return cache.read( param, ( byte[] )args ) ? OK : ERROR;
                case CWRITE:  // to be implemented in assignment 4
@@ -176,18 +189,44 @@ public class Kernel
                case CFLUSH:  // to be implemented in assignment 4
                   cache.flush( );
                   return OK;
-               case OPEN:    // to be implemented in project
-                  return OK;
-               case CLOSE:   // to be implemented in project
-                  return OK;
-               case SIZE:    // to be implemented in project
-                  return OK;
-               case SEEK:    // to be implemented in project
-                  return OK;
-               case FORMAT:  // to be implemented in project
-                  return OK;
-               case DELETE:  // to be implemented in project
-                  return OK;
+               case OPEN:
+                   String[] sArgs = (String[]) args;
+                   if ((myTcb = scheduler.getMyTcb()) != null) {
+                       return myTcb.getFd(fs.open(sArgs[0], sArgs[1]));
+                   }
+                   else {
+                       return ERROR;
+                   }
+               case CLOSE:
+                   myTcb = scheduler.getMyTcb();
+                   if (myTcb == null) {
+                       return ERROR;
+                   }
+                   ftEnt = getFileTableEntry(param);
+                   if (ftEnt == null || !fs.close(ftEnt)) {
+                       return ERROR;
+                   }
+                   if (myTcb.returnFd(param) != ftEnt) {
+                       return ERROR;
+                   }
+                   return OK;
+               case SIZE:
+                   ftEnt = getFileTableEntry(param);
+                   if (ftEnt != null) {
+                       return fs.fsize(ftEnt);
+                   }
+                   return ERROR;
+               case SEEK:
+                   int[] seekArgs = (int[]) args;
+                   ftEnt = getFileTableEntry(param);
+                   if (ftEnt != null) {
+                       return fs.seek(ftEnt, seekArgs[0], seekArgs[1]);
+                   }
+                   return ERROR;
+               case FORMAT:
+                   return fs.format(param) ? OK : ERROR;
+               case DELETE:
+                   return fs.delete((String) args) ? OK : ERROR;
             }
             return ERROR;
          case INTERRUPT_DISK: // Disk interrupts
@@ -204,7 +243,16 @@ public class Kernel
       return OK;
    }
 
+   /**
+    * Rets the current file table entry from the TCB or null if it isn't found.
+    */
+   private static FileTableEntry getFileTableEntry(int fd) {
+       TCB tcb = scheduler.getMyTcb();
+       return tcb != null ? tcb.getFtEnt(fd) : null;
+   }
+   
    // Spawning a new thread
+   @SuppressWarnings({ "rawtypes", "unchecked" })
    private static int sysExec( String args[] ) {
       String thrName = args[0]; // args[0] has a thread name
       Object thrObj = null;
