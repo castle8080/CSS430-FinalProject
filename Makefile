@@ -11,6 +11,9 @@ build:
 run: build
 	java -cp classes:lib/threados.jar Boot
 
-run_debug: build
+run_original:
+	java -cp lib/threados.jar Boot
+
+debug: build
 	java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=8000 -cp classes:lib/threados.jar Boot
 
