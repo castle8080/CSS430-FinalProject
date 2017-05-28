@@ -96,6 +96,9 @@ public class Kernel
                   }
                   return ERROR;
                case EXIT:
+                  // Save the file system back to disk on thread exit as a checkpoint.
+                  fs.sync();
+                  
                   if ( ( myTcb = scheduler.getMyTcb( ) ) != null ) {
                      int myPid = myTcb.getPid( ); // get my parent ID
                      int myTid = myTcb.getTid( ); // get my ID
@@ -124,6 +127,9 @@ public class Kernel
                      ioQueue.enqueueAndSleep( COND_DISK_FIN );
                   return OK;
                case SYNC:     // synchronize disk data to a real file
+                  // Sync the file system to disk first, then flush the disk.
+                  fs.sync();
+                  
                   while ( disk.sync( ) == false )
                      ioQueue.enqueueAndSleep( COND_DISK_REQ );
                   while ( disk.testAndResetReady( ) == false )
