@@ -1,4 +1,3 @@
-import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -6,8 +5,6 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.HashSet;
 import java.util.Set;
-
-import sun.awt.CharsetString;
 
 /**
  * This class is useful for interactively testing the filesystem.
