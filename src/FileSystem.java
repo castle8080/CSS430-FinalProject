@@ -50,7 +50,7 @@ public class FileSystem {
         
         // In write only mode the rest of the file should be freed
         // if there is not more than 1 instance of the file open already.
-        if (FileMode.WRITE.equals(mode) && ftEntry.inode.count > 1) {
+        if (FileMode.WRITE.equals(mode) && ftEntry.inode.count <= 1) {
             if (!truncate(ftEntry)) {
                 close(ftEntry);
                 return null;
@@ -216,11 +216,13 @@ public class FileSystem {
         
         // Free any extra index blocks from the extended section.
         byte[] indexBlockData = ftEntry.inode.unregisterIndexBlock();
-        for (int i = 0; i < indexBlockData.length; i += 2) {
-            int block = SysLib.bytes2short(indexBlockData, i);
-            if (block >= 0) {
-                if (!superBlock.returnBlock(block)) {
-                    SysLib.cerr("ERROR: failed to return block: " + block);
+        if (indexBlockData != null) {
+            for (int i = 0; i < indexBlockData.length; i += 2) {
+                int block = SysLib.bytes2short(indexBlockData, i);
+                if (block >= 0) {
+                    if (!superBlock.returnBlock(block)) {
+                        SysLib.cerr("ERROR: failed to return block: " + block);
+                    }
                 }
             }
         }
@@ -240,11 +242,6 @@ public class FileSystem {
         if (ftEntry == null) {
             return false;
         }
-        if (ftEntry.inode.count > 1) {
-            // Can't delete if other things have the file open.
-            return false;
-        }
-        
         // Get the inode to remove.
         short iNumber = -1;
         try {
@@ -258,6 +255,7 @@ public class FileSystem {
             close(ftEntry);
         }
         
+        // Frees the slot in the directory.
         if (!root.ifree(iNumber)) {
             // Failed to free the slot.
             return false;
