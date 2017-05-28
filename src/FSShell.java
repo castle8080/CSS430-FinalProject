@@ -3,7 +3,9 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -155,19 +157,49 @@ public class FSShell implements Runnable {
      */
     public void dump() throws Exception {
         // Recurses through the FileSystem outputting the private fields.
+        dumpObject("fs", getFileSystem(), new HashSet<Object>(), 0);
+    }
+    
+    public void debugFreeList() throws Exception {
+        FileSystem fs = getFileSystem();
+        SuperBlock sb = getFieldOfType(FileSystem.class, fs, SuperBlock.class);
         
-        FileSystem fs = null;
-
-        // Hack out the file system instance!
-        for (Field f : Kernel.class.getDeclaredFields()) {
-            if (FileSystem.class.equals(f.getType())) {
-                f.setAccessible(true);
-                fs = (FileSystem) f.get(null);
-                break;
+        int node = sb.freeList;
+        byte[] buffer = new byte[Disk.blockSize];
+        List<Integer> nodes = new ArrayList<Integer>();
+        
+        while (node >= 0) {
+            nodes.add(node);
+            if (SysLib.rawread(node, buffer) == Kernel.ERROR) {
+                SysLib.cerr("Could not read!");
+                return;
             }
+            node = SysLib.bytes2int(buffer, 0);
         }
         
-        dumpObject("fs", fs, new HashSet<Object>(), 0);
+        SysLib.cout("Free List:\n" + nodes + "\n");
+    }
+    
+    /**
+     * Finds the FileSystem instance in ThreadOS. (Hack!)
+     */
+    private FileSystem getFileSystem() throws Exception {
+        return getFieldOfType(Kernel.class, null, FileSystem.class);
+    }
+    
+    /**
+     * Finds a field in another object by type.
+     */
+    @SuppressWarnings("unchecked")
+    private <C,T> T getFieldOfType(Class<C> containerClass, C container, Class<T> fieldClass) throws Exception {
+        // Hack out the file system instance!
+        for (Field f : containerClass.getDeclaredFields()) {
+            if (fieldClass.equals(f.getType())) {
+                f.setAccessible(true);
+                return (T) f.get(container);
+            }
+        }
+        throw new Exception("Couldn't find type: " + fieldClass.getSimpleName());
     }
     
     /**
