@@ -88,9 +88,12 @@ public class FileSystem {
             return Kernel.ERROR;
         }
         byte[] blockBuffer = new byte[Disk.blockSize];
-        int target = Math.min(ftEntry.seekPtr + buffer.length, ftEntry.inode.length);
-        int bufferPos = 0;
         
+        int ftRemain = ftEntry.inode.length - ftEntry.seekPtr;
+        int nToRead = Math.min(ftRemain, buffer.length);
+        int target = ftEntry.seekPtr + nToRead;
+        int bufferPos = 0;
+
         while (ftEntry.seekPtr < target) {
             
             // Find and read in a block from disk.
@@ -104,9 +107,9 @@ public class FileSystem {
             
             // Copy content from block buffer into the buffer.
             int offset = ftEntry.seekPtr % Disk.blockSize;
-            int len = Math.min(buffer.length - bufferPos, blockBuffer.length - offset);
+            int len = Math.min(nToRead - bufferPos, blockBuffer.length - offset);
+
             System.arraycopy(blockBuffer, offset, buffer, bufferPos, len);
-            
             
             // Update the seek position.
             ftEntry.seekPtr += len;

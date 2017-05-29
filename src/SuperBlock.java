@@ -40,6 +40,7 @@ public class SuperBlock {
         this.inodeBlocks = inodeBlocks;
         formatInodes();
         formatFreeList();
+        sync();
     }
     
     public int getFreeBlock() {

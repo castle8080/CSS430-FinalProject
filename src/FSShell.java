@@ -1,3 +1,5 @@
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -45,6 +47,45 @@ public class FSShell implements Runnable {
         if (SysLib.delete(fileName) != Kernel.OK) {
             SysLib.cerr("Could not delete: " + fileName + "\n");
         }
+    }
+    
+    public void fopen(String fileName, String mode) {
+        int fd = SysLib.open(fileName, mode);
+        if (fd < 0) {
+            SysLib.cerr("Could not open: " + fileName + "\n");
+        }
+        else {
+            SysLib.cout("Opened file: fd=" + fd + "\n");
+        }
+    }
+    
+    public void fclose(int fd) {
+        if (SysLib.close(fd) == Kernel.ERROR) {
+            SysLib.cerr("Could not close fd " + fd + "\n");
+        }
+    }
+    
+    public void fseek(int fd, int offset, int whence) {
+        if (SysLib.seek(fd, offset, whence) == Kernel.ERROR) {
+            SysLib.cerr("Could not seek!\n");
+        }
+    }
+    
+    public void fwrite(int fd, String content) throws Exception {
+        if (SysLib.write(fd, content.getBytes("UTF-8")) == Kernel.ERROR) {
+            SysLib.cerr("Could not write!\n");
+        }
+    }
+    
+    public void fread(int fd, int size) throws Exception { 
+        byte[] buffer = new byte[size];
+        int nRead = SysLib.read(fd, buffer);
+        
+        if (nRead == Kernel.ERROR) {
+            SysLib.cerr("Failed to read!\n");
+        }
+        
+        SysLib.cout("Read: [" + nRead + "]\n" + new String(buffer, 0, nRead, "UTF-8") + "\n");
     }
     
     public void size(String fileName) {
@@ -152,14 +193,6 @@ public class FSShell implements Runnable {
         }
     }
     
-    /**
-     * Dumps the details of the file system objects.
-     */
-    public void dump() throws Exception {
-        // Recurses through the FileSystem outputting the private fields.
-        dumpObject("fs", getFileSystem(), new HashSet<Object>(), 0);
-    }
-    
     public void debugFreeList() throws Exception {
         FileSystem fs = getFileSystem();
         SuperBlock sb = getFieldOfType(FileSystem.class, fs, SuperBlock.class);
@@ -181,27 +214,23 @@ public class FSShell implements Runnable {
     }
     
     /**
-     * Finds the FileSystem instance in ThreadOS. (Hack!)
+     * Dumps the details of the file system objects.
      */
-    private FileSystem getFileSystem() throws Exception {
-        return getFieldOfType(Kernel.class, null, FileSystem.class);
+    public void dumpfs() throws Exception {
+        // Recurses through the FileSystem outputting the private fields.
+        dumpObject("fs", getFileSystem(), new HashSet<Object>(), 0);
     }
-    
+   
     /**
-     * Finds a field in another object by type.
+     * Dumps the details of the current tcb.
      */
-    @SuppressWarnings("unchecked")
-    private <C,T> T getFieldOfType(Class<C> containerClass, C container, Class<T> fieldClass) throws Exception {
-        // Hack out the file system instance!
-        for (Field f : containerClass.getDeclaredFields()) {
-            if (fieldClass.equals(f.getType())) {
-                f.setAccessible(true);
-                return (T) f.get(container);
-            }
-        }
-        throw new Exception("Couldn't find type: " + fieldClass.getSimpleName());
+    public void dumpfte() throws Exception {
+        Scheduler scheduler = getFieldOfType(Kernel.class, null, Scheduler.class);
+        TCB tcb = scheduler.getMyTcb();
+        FileTableEntry[] entries = getFieldOfType(TCB.class, tcb, FileTableEntry[].class);
+        dumpObject("ftes", entries, new HashSet<Object>(), 0);
     }
-    
+
     /**
      * Helper for dump.
      */
@@ -218,14 +247,16 @@ public class FSShell implements Runnable {
             sb.append(' ');
         }
         
-        String sValue = o.toString();
+        String sValue = String.valueOf(o);
         if (o instanceof char[]) {
             sValue = new String((char[]) o);
         }
+        SysLib.cout(sb.toString() + name + " [" + sValue + "] " + (o == null ? "" : o.getClass().getSimpleName()) + "\n");
         
-        SysLib.cout(sb.toString() + name + " [" + sValue + "] " + o.getClass().getSimpleName() + "\n");
-        
-        if (o instanceof char[]) {
+        if (o == null) {
+            // skip
+        }
+        else if (o instanceof char[]) {
             // skip
         }
         else if (o.getClass().isArray()) {
@@ -266,7 +297,7 @@ public class FSShell implements Runnable {
                 return;
             }
             for (Method m : FSShell.class.getDeclaredMethods()) {
-                if (m.getName().equals(command[0])) {
+                if (m.getName().equals(command[0]) && command.length - 1 == m.getParameterTypes().length) {
                     execute(m, command);
                     return;
                 }
@@ -278,7 +309,11 @@ public class FSShell implements Runnable {
             throw e;
         }
         catch (Throwable e) {
-            SysLib.cerr("ERROR: " + e.getMessage() + "\n");
+            StringWriter sw = new StringWriter();
+            PrintWriter out = new PrintWriter(sw);
+            e.printStackTrace(out);
+            out.flush();
+            SysLib.cerr("ERROR: " + e.getMessage() + "\n" + sw.toString() + "\n");
         }
     }
     
@@ -339,6 +374,28 @@ public class FSShell implements Runnable {
         catch (InvocationTargetException e) {
             throw e.getCause();
         }
+    }
+    
+    /**
+     * Finds the FileSystem instance in ThreadOS. (Hack!)
+     */
+    private FileSystem getFileSystem() throws Exception {
+        return getFieldOfType(Kernel.class, null, FileSystem.class);
+    }
+    
+    /**
+     * Finds a field in another object by type.
+     */
+    @SuppressWarnings("unchecked")
+    private <C,T> T getFieldOfType(Class<C> containerClass, C container, Class<T> fieldClass) throws Exception {
+        // Hack out the file system instance!
+        for (Field f : containerClass.getDeclaredFields()) {
+            if (fieldClass.equals(f.getType())) {
+                f.setAccessible(true);
+                return (T) f.get(container);
+            }
+        }
+        throw new Exception("Couldn't find type: " + fieldClass.getSimpleName());
     }
     
     /**
