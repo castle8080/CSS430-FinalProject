@@ -1,14 +1,6 @@
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.lang.reflect.Array;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.io.*;
+import java.lang.reflect.*;
+import java.util.*;
 
 /**
  * This class is useful for interactively testing the filesystem.
@@ -42,13 +34,20 @@ public class FSShell implements Runnable {
             SysLib.exit();
         }
     }
-
+    
+	/**
+	 * Delete a file by file name.
+	 */
     public void delete(String fileName) {
         if (SysLib.delete(fileName) != Kernel.OK) {
             SysLib.cerr("Could not delete: " + fileName + "\n");
         }
     }
     
+    /**
+     * Open a file and print out the file descriptor,
+     * which can be used with other commands.
+     */
     public void fopen(String fileName, String mode) {
         int fd = SysLib.open(fileName, mode);
         if (fd < 0) {
@@ -59,24 +58,36 @@ public class FSShell implements Runnable {
         }
     }
     
+    /**
+     * Close the file descriptor.
+     */
     public void fclose(int fd) {
         if (SysLib.close(fd) == Kernel.ERROR) {
             SysLib.cerr("Could not close fd " + fd + "\n");
         }
     }
     
+    /**
+     * Seek a position for the given file descriptor.
+     */
     public void fseek(int fd, int offset, int whence) {
         if (SysLib.seek(fd, offset, whence) == Kernel.ERROR) {
             SysLib.cerr("Could not seek!\n");
         }
     }
     
+    /**
+     * Write a string to the open file.
+     */
     public void fwrite(int fd, String content) throws Exception {
         if (SysLib.write(fd, content.getBytes("UTF-8")) == Kernel.ERROR) {
             SysLib.cerr("Could not write!\n");
         }
     }
     
+    /**
+     * Read size bytes as a string from the file.
+     */
     public void fread(int fd, int size) throws Exception { 
         byte[] buffer = new byte[size];
         int nRead = SysLib.read(fd, buffer);
@@ -88,6 +99,9 @@ public class FSShell implements Runnable {
         SysLib.cout("Read: [" + nRead + "]\n" + new String(buffer, 0, nRead, "UTF-8") + "\n");
     }
     
+    /**
+     * Get the size of the file by filename.
+     */
     public void size(String fileName) {
         int fd = SysLib.open(fileName, "r");
         try {
@@ -105,6 +119,79 @@ public class FSShell implements Runnable {
         }
     }
     
+    /**
+     * Copy a file from the external file system into thread os.
+     */
+    public void importFile(String externalFile, String internalFile) throws Exception {
+    	FileInputStream fis = new FileInputStream(externalFile);
+    	try {
+    		byte[] buffer = new byte[Disk.blockSize];
+    		int fd = SysLib.open(internalFile, "w");
+    		if (fd < 0) {
+    			throw new IOException("Could not open internal file: " + internalFile);
+    		}
+    		try {
+        		while (true) {
+        			int nRead = fis.read(buffer);
+        			if (nRead < 0) {
+        				return;
+        			}
+        			int writeResult;
+        			if (nRead < buffer.length) {
+        				writeResult = SysLib.write(fd, Arrays.copyOf(buffer, nRead));
+        			}
+        			else {
+        				writeResult = SysLib.write(fd, buffer);
+        			}
+        			if (writeResult < 0) {
+        				throw new IOException("Could not write data.");
+        			}
+        		}
+    		}
+    		finally {
+    			SysLib.close(fd);
+    		}
+    	}
+    	finally {
+    		fis.close();
+    	}
+    }
+    
+    /**
+     * Copy a file from thread os back out to the file system.
+     */
+    public void exportFile(String internalFile, String externalFile) throws Exception {
+		byte[] buffer = new byte[Disk.blockSize];
+	    int fd = SysLib.open(internalFile, "r");
+		if (fd < 0) {
+			throw new IOException("Could not open internal file: " + internalFile);
+		}
+		try {
+			FileOutputStream fos = new FileOutputStream(externalFile);
+    		try {
+        		while (true) {
+        			int nRead = SysLib.read(fd, buffer);
+        			if (nRead < 0) {
+        				throw new IOException("Could not read data.");
+        			}
+        			else if (nRead == 0) {
+        				return;
+        			}
+        			fos.write(buffer, 0, nRead);
+        		}
+    		}
+    		finally {
+    			fos.close();
+    		}
+		}
+		finally {
+			SysLib.close(fd);
+		}
+    }
+    
+    /**
+     * Read the whole file and print it out as a string.
+     */
     public void read(String fileName) throws Exception {
         int fd = SysLib.open(fileName, "r");
         try {
@@ -130,6 +217,9 @@ public class FSShell implements Runnable {
         }
     }
     
+    /**
+     * Open the file in append mode and write the line to the file.
+     */
     public void appendLine(String fileName, String content) throws Exception {
         int fd = SysLib.open(fileName, "a");
         try {
@@ -149,6 +239,9 @@ public class FSShell implements Runnable {
         }
     }
     
+    /**
+     * Write the given content to the file by filename.
+     */
     public void write(String fileName, String content) throws Exception {
         int fd = SysLib.open(fileName, "w");
         try {
@@ -193,6 +286,9 @@ public class FSShell implements Runnable {
         }
     }
     
+    /**
+     * Dumps out the block free list.
+     */
     public void debugFreeList() throws Exception {
         FileSystem fs = getFileSystem();
         SuperBlock sb = getFieldOfType(FileSystem.class, fs, SuperBlock.class);
@@ -397,7 +493,7 @@ public class FSShell implements Runnable {
         }
         throw new Exception("Couldn't find type: " + fieldClass.getSimpleName());
     }
-    
+
     /**
      * Exception that indicates the shell should exit.
      */

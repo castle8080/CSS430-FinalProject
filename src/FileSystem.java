@@ -8,8 +8,11 @@ public class FileSystem {
     /**
      * Create the new FileSystem.
      */
-    public FileSystem(int files) {
-        superBlock = new SuperBlock(files);
+    public FileSystem(int totalBlocks) {
+        if (totalBlocks < 0) {
+            throw new FileSystemException("Invalid value for totalBlocks (" + totalBlocks + ")");
+        }
+        superBlock = new SuperBlock(totalBlocks);
         root = new Directory(this.superBlock.inodeBlocks);
         fileTable = new FileTable(root);
         if (!syncRootFromDisk()) {
@@ -28,6 +31,13 @@ public class FileSystem {
     public boolean format(int files) {
         // Do not format if the fileTable has open files.
         if (!fileTable.fempty()) {
+            return false;
+        }
+        
+        // Don't allow formatting larger than the number of inodes that can be
+        // stored on disk.
+        int maxInodes = superBlock.totalBlocks * Disk.blockSize / Inode.iNodeSize;
+        if (files > maxInodes) {
             return false;
         }
         
