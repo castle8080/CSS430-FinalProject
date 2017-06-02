@@ -33,58 +33,63 @@ public class SuperBlock {
     }
     
     public void format(int inodeBlocks) {
-        if (inodeBlocks <= 0) {
-            throw new FileSystemException("Invalid inodeBlocks: " + inodeBlocks);
+        synchronized (this) {
+            if (inodeBlocks <= 0) {
+                throw new FileSystemException("Invalid inodeBlocks: " + inodeBlocks);
+            }
+
+            this.inodeBlocks = inodeBlocks;
+            formatInodes();
+            formatFreeList();
+            sync();
         }
-        
-        this.inodeBlocks = inodeBlocks;
-        formatInodes();
-        formatFreeList();
-        sync();
     }
     
     public int getFreeBlock() {
-        if (this.freeList < 0) {
-            // The blocks are exhausted
-            return Kernel.ERROR;
-        }
+        synchronized (this) {
+            if (this.freeList < 0) {
+                // The blocks are exhausted
+                return Kernel.ERROR;
+            }
 
-        byte[] buffer = new byte[Disk.blockSize];
-        if (SysLib.rawread(this.freeList, buffer) == Kernel.ERROR) {
-            return Kernel.ERROR;
+            byte[] buffer = new byte[Disk.blockSize];
+            if (SysLib.rawread(this.freeList, buffer) == Kernel.ERROR) {
+                return Kernel.ERROR;
+            }
+
+            int result = this.freeList;
+            this.freeList = SysLib.bytes2int(buffer, 0);
+            return result;
         }
-        
-        int result = this.freeList;
-        this.freeList = SysLib.bytes2int(buffer, 0);
-        
-        // TODO: should I write out the superblock now?
-        
-        return result;
     }
     
     public boolean returnBlock(int block) {
-        if (block < getInitialFreeBlock() || block >= this.totalBlocks) {
-            return false;
-        }
-        
+        synchronized (this) {
+            if (block < getInitialFreeBlock() || block >= this.totalBlocks) {
+                return false;
+            }
 
-        byte[] buffer = new byte[Disk.blockSize];
-        SysLib.int2bytes(this.freeList, buffer, 0);
-        if (SysLib.rawwrite(block, buffer) == Kernel.ERROR) {
-            return false;
+
+            byte[] buffer = new byte[Disk.blockSize];
+            SysLib.int2bytes(this.freeList, buffer, 0);
+            if (SysLib.rawwrite(block, buffer) == Kernel.ERROR) {
+                return false;
+            }
+
+            this.freeList = block;
+            return true;
         }
-        
-        this.freeList = block;
-        return true;
     }
     
     public void sync() {
-        byte[] buffer = new byte[Disk.blockSize];
-        SysLib.int2bytes(totalBlocks, buffer, 0);
-        SysLib.int2bytes(inodeBlocks, buffer, 4);
-        SysLib.int2bytes(freeList, buffer, 8);
-        if (SysLib.rawwrite(0, buffer) == Kernel.ERROR) {
-            throw new FileSystemException("Could not write super block.");
+        synchronized (this) {
+            byte[] buffer = new byte[Disk.blockSize];
+            SysLib.int2bytes(totalBlocks, buffer, 0);
+            SysLib.int2bytes(inodeBlocks, buffer, 4);
+            SysLib.int2bytes(freeList, buffer, 8);
+            if (SysLib.rawwrite(0, buffer) == Kernel.ERROR) {
+                throw new FileSystemException("Could not write super block.");
+            }
         }
     }
     
