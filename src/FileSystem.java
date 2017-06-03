@@ -1,12 +1,22 @@
-
+/**
+ * The FileSystem is the main module for performing operations
+ * on the files and the file system structure.
+ */
 public class FileSystem {
-    
+
+    /** Manages the blocks on the file system. */
     private final SuperBlock superBlock;
+
+    /** The main root directory. */
     private Directory root;
+
+    /** Manages file table entry objects. */
     private FileTable fileTable;
     
     /**
      * Create the new FileSystem.
+     *
+     * @param totalBlocks The number of blocks available to the file system.
      */
     public FileSystem(int totalBlocks) {
         if (totalBlocks < 0) {
@@ -20,6 +30,9 @@ public class FileSystem {
         }
     }
 
+    /**
+     * Syncs all data back to disk for the file system.
+     */
     public void sync() {
         // Lock the file system while performing sync.
         synchronized (this) {
@@ -30,7 +43,13 @@ public class FileSystem {
             superBlock.sync();
         }
     }
-    
+
+    /**
+     * Formats the disk.
+     *
+     * @param files The number of files to support.
+     * @return true on success or false if the disk could not be formatted.
+     */
     public boolean format(int files) {
         synchronized (this) {
             // Do not format if the fileTable has open files.
@@ -52,7 +71,20 @@ public class FileSystem {
             return true;
         }
     }
-    
+
+    /**
+     * Opens a file.
+     *
+     * The following modes are supported:
+     *   r - Read
+     *   w - Write
+     *   a - Append
+     *   w+ - Read and Write
+     *
+     * @param fileName The filename to open.
+     * @param mode The mode of the file.
+     * @return A FileTableEntry on success or null on failure.
+     */
     public FileTableEntry open(String fileName, String mode) {
         if (fileName == null || fileName.length() == 0) {
             return null;
@@ -71,12 +103,6 @@ public class FileSystem {
 
         // In write only mode the rest of the file should be freed
         // if there is not more than 1 instance of the file open already.
-        // Note: there may be a race condition here since the code is looking
-        //       at ftEntry.inode in an ftEntry lock instead of file system lock.
-        //       I think the fix here is to introduce a different type of lock
-        //       that can be acquired on the ftEntry from within the file system lock,
-        //       but then have the fs lock released.
-
         synchronized (ftEntry) {
             if (FileMode.WRITE.equals(mode) && ftEntry.inode.count <= 1) {
                 if (!truncate(ftEntry)) {
@@ -88,7 +114,10 @@ public class FileSystem {
 
         return ftEntry;
     }
-    
+
+    /**
+     * Closes the file table entry.
+     */
     public boolean close(FileTableEntry ftEntry) {
         synchronized (ftEntry) {
             ftEntry.count--;
@@ -100,13 +129,25 @@ public class FileSystem {
             }
         }
     }
-    
+
+    /**
+     * Get the size of the file table entry.
+     */
     public int fsize(FileTableEntry ftEntry) {
         synchronized (ftEntry) {
             return ftEntry.inode.length;
         }
     }
 
+    /**
+     * Reads data into buffer from the file table entry starting
+     * at the current seek position.  The seek position will be
+     * changed based on how much is read.
+     *
+     * @param ftEntry The file to read from
+     * @param buffer The array to read data into
+     * @return How many bytes were read into buffer or -1 on error.
+     */
     public int read(FileTableEntry ftEntry, byte[] buffer) {
         synchronized (ftEntry) {
             if (!FileMode.isReadable(ftEntry.mode)) {
@@ -144,7 +185,14 @@ public class FileSystem {
             return bufferPos;
         }
     }
-    
+
+    /**
+     * Writes data from buffer into the given file.
+     *
+     * @param ftEntry The file to write to.
+     * @param buffer The data to write.
+     * @return The number of bytes read or -1 on error.
+     */
     public int write(FileTableEntry ftEntry, byte[] buffer) {
         synchronized (ftEntry) {
             if (!FileMode.isWritable(ftEntry.mode)) {
@@ -188,6 +236,12 @@ public class FileSystem {
         }
     }
 
+    /**
+     * Deletes the specified file.
+     *
+     * @param fileName The file name to delete.
+     * @return true on success or false on error.
+     */
     public boolean delete(String fileName) {
         // Open up the file.
         // If this is the only instance opening the file it's
@@ -225,7 +279,26 @@ public class FileSystem {
             return true;
         }
     }
-    
+
+    /**
+     * Change the seek position of the file table entry.
+     *
+     * The whence parameter is one of:
+     *   Seek.SET(0) - Seek from the beginning.
+     *   Seek.CUR(1) - Seek from current seek position.
+     *   Seek.END(2) - Seek from the end of the file.
+     *
+     * If the absolute position change would go beyond the end of
+     * the file, the seek position will be at the end of the file.
+     *
+     * If the absolute position change ends up being negative, then
+     * the position will be at the beginning of the file.
+     *
+     * @param ftEntry The file table entry to seek within.
+     * @param offset The amount to seek by.
+     * @param whence Where to seek from.
+     * @return The new postion or Kernel.ERROR on error.
+     */
     public int seek(FileTableEntry ftEntry, int offset, int whence) {
         synchronized (ftEntry) {
             int absOffset = -1;
