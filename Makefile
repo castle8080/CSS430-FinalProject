@@ -20,4 +20,4 @@ debug: build
 package:
 	rm -rf output
 	mkdir -p output
-	zip -r output/CSS430-FinalProject-AfterworkKnightRiders.zip src Makefile lib	
+	zip -r output/CSS430-FinalProject-AfterworkKnightRiders.zip src Makefile lib README.txt *.docx
