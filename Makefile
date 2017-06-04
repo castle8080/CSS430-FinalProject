@@ -17,3 +17,7 @@ run_original:
 debug: build
 	java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=8000 -cp classes:lib/threados.jar Boot
 
+package:
+	rm -rf output
+	mkdir -p output
+	zip -r output/CSS430-FinalProject-AfterworkKnightRiders.zip src Makefile lib	
