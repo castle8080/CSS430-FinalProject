@@ -89,6 +89,11 @@ public class FileTable {
 			if(mode != "r")
 			{
 				inumber = dir.ialloc(filename);	//get an iNumber from the directory
+				if (inumber < 0)
+				{
+					// Error allocating file.
+					return null;
+				}
 				inode = new Inode();	//allocate new Inode
 				break;
 			}

@@ -26,7 +26,7 @@ public class Directory
         //inits the directory instance with this data[]
         
         //consider input sanitation
-        if(data == null) // || data[0] == null) 
+        if(data == null)
         {
             //reconsider this implementation; 
             //it might be ok that data[] is null/empty, at which point
@@ -99,7 +99,10 @@ public class Directory
         //input sanitation 
         if(filename == null || filename.isEmpty())
             return NOT_FOUND;
-        
+
+        // Do not allow filenames that are too long.
+        if (filename.length() > maxChars)
+            return Kernel.ERROR;
         
         short output = NOT_FOUND;
         for(int i = 1; i < fsizes.length; i++)
