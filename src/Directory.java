@@ -42,7 +42,6 @@ public class Directory
             offset += 4;
         }
         
-        
         for(int i = 0; i < fnames.length; i++)
         {
             String fn = new String(data, offset, maxChars * 2);
@@ -75,7 +74,6 @@ public class Directory
             offset += 4;
         }
 
-
         for(int i = 0; i < fnames.length; i++)
         {
             String fn = new String(fnames[i], 0, fsizes[i]);
@@ -83,8 +81,7 @@ public class Directory
             
             for(int j = 0; j < fnBytes.length; j++)
             {
-                b[offset] = fnBytes[j];
-                offset++;
+                b[offset + j] = fnBytes[j];
             }
             offset += maxChars * 2;
         }
