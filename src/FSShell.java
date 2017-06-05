@@ -331,13 +331,6 @@ public class FSShell implements Runnable {
      * Helper for dump.
      */
     private void dumpObject(String name, Object o, Set<Object> visited, int level) throws Exception {
-        if (visited.contains(o)) {
-            return;
-        }
-        else {
-            visited.add(o);
-        }
-        
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < level * 4; i++) {
             sb.append(' ');
@@ -349,6 +342,12 @@ public class FSShell implements Runnable {
         }
         SysLib.cout(sb.toString() + name + " [" + sValue + "] " + (o == null ? "" : o.getClass().getSimpleName()) + "\n");
         
+        if (visited.contains(o)) {
+            return;
+        }
+        else {
+            visited.add(o);
+        }
         if (o == null) {
             // skip
         }
@@ -370,7 +369,7 @@ public class FSShell implements Runnable {
                 i++;
             }
         }
-        else if (o instanceof String || o.getClass().isPrimitive()) {
+        else if (o instanceof String || o.getClass().isPrimitive() || o instanceof Number) {
             // Already displayed.
         }
         else {
